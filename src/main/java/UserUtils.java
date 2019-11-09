@@ -1,4 +1,5 @@
 import com.alibaba.fastjson.JSONObject;
+import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 import org.apache.commons.io.IOUtils;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.openssl.PEMKeyPair;
@@ -47,9 +48,22 @@ public class UserUtils {
     }
 
     public static SampleUser unSerializeUser(File file) throws IOException {
-        SampleUser sampleUser = JSONObject.parseObject(IOUtils.toString(new FileInputStream(file),
-                Charset.forName("utf-8")), SampleUser.class);
-        sampleUser.setEnrollment(null);
-        return sampleUser;
+        char[] buf = new char[1024];
+        StringBuilder sb = new StringBuilder();
+        try {
+            FileReader cardReader = new FileReader(file);
+            int num;
+            while ((num = cardReader.read(buf)) != -1) {
+                sb.append(buf, 0, num);
+            }
+            cardReader.close();
+            String content = new String(Base64.decode(sb.toString()));
+            SampleUser sampleUser = JSONObject.parseObject(content, SampleUser.class);
+            sampleUser.setEnrollment(null);
+            return sampleUser;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }

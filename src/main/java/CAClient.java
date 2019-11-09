@@ -1,4 +1,5 @@
 import com.alibaba.fastjson.JSONObject;
+import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 import org.hyperledger.fabric.sdk.Enrollment;
 import org.hyperledger.fabric.sdk.NetworkConfig;
 import org.hyperledger.fabric.sdk.helper.Utils;
@@ -39,7 +40,8 @@ public class CAClient {
             sampleUser.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
             sampleUser.setSignedCert(enrollment.getCert());
             FileWriter fileWriter = new FileWriter(file);
-            fileWriter.write(JSONObject.toJSONString(sampleUser));
+            String encode = Base64.encode(JSONObject.toJSONString(sampleUser).getBytes());
+            fileWriter.write(encode);
             fileWriter.close();
             return sampleUser;
         }
@@ -99,7 +101,8 @@ public class CAClient {
         FileWriter cardWriter = new FileWriter(cardfile);
         FileWriter certWriter = new FileWriter(certfile);
         FileWriter keyWriter = new FileWriter(keyfile);
-        cardWriter.write(JSONObject.toJSONString(user));
+        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
+        cardWriter.write(encode);
         certWriter.write(user.getSignedCert());
         keyWriter.write(user.getPrivateKey());
         cardWriter.close();
