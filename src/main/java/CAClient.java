@@ -4,14 +4,13 @@ import org.hyperledger.fabric.sdk.Enrollment;
 import org.hyperledger.fabric.sdk.NetworkConfig;
 import org.hyperledger.fabric.sdk.helper.Utils;
 import org.hyperledger.fabric.sdk.security.CryptoSuite;
-import org.hyperledger.fabric_ca.sdk.Attribute;
-import org.hyperledger.fabric_ca.sdk.EnrollmentRequest;
-import org.hyperledger.fabric_ca.sdk.HFCAClient;
-import org.hyperledger.fabric_ca.sdk.RegistrationRequest;
+import org.hyperledger.fabric_ca.sdk.*;
+import org.hyperledger.fabric_ca.sdk.exception.InvalidArgumentException;
 import org.w3c.dom.Attr;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -122,7 +121,28 @@ public class CAClient {
         return revoke;
     }
 
-
+    public void reenrollUser(SampleUser user) throws Exception {
+        String username = user.getName();
+        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
+        File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
+        File keyfile = new File(storePath + "/"+ username + "/" + username + ".pem");
+        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
+        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
+        Enrollment enrollment = caClient.reenroll(user);
+        String signedCert = enrollment.getCert();
+        user.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
+        user.setSignedCert(signedCert);
+        FileWriter cardWriter = new FileWriter(cardfile);
+        FileWriter certWriter = new FileWriter(certfile);
+        FileWriter keyWriter = new FileWriter(keyfile);
+        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
+        cardWriter.write(encode);
+        certWriter.write(user.getSignedCert());
+        keyWriter.write(user.getPrivateKey());
+        cardWriter.close();
+        certWriter.close();
+        keyWriter.close();
+    }
 
     public static void main(String[] args) throws Exception {
         Path connectionFilePath = Paths.get("./", "connection.json");
@@ -130,12 +150,19 @@ public class CAClient {
         CAClient caClient = new CAClient(connectionProfile.getNetworkConfig().getClientOrganization());
         ArrayList<Attribute> attList = new ArrayList<Attribute>();
         String username = "test9";
+        File cardFile = new File("./card/" + username + "/" + username + ".card");
+
         System.out.println("===== 在 Fabric CA 注册用户 =====");
         SampleUser user = caClient.registerUser(username, attList);
+
         System.out.println("===== 在 Fabric CA 登录用户，并创建用户私钥和证书 =====");
         caClient.enrollUser(user, attList);
+
+        System.out.println("===== 从 Fabric CA 获取证书 =====");
+        SampleUser cuser = UserUtils.unSerializeUser(cardFile);
+        caClient.reenrollUser(cuser);
+
         System.out.println("===== 在 Fabric CA 注销用户，并删除用户私钥和证书 =====");
-        File cardFile = new File("./card/" + username + "/" + username + ".card");
         SampleUser ruser = UserUtils.unSerializeUser(cardFile);
         String revoke = caClient.revokeUser(ruser);
         System.out.println("revoke: " + revoke);

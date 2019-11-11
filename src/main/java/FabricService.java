@@ -143,9 +143,7 @@ public class FabricService {
         }
 
         private void registerUser(String username) throws Exception {
-            Path connectionFilePath = Paths.get("./", "connection.json");
-            ConnectionProfile connectionProfile = new ConnectionProfile(connectionFilePath.toFile());
-            CAClient caClient = new CAClient(connectionProfile.getNetworkConfig().getClientOrganization());
+            CAClient caClient = newCAClient();
             ArrayList<Attribute> attList = new ArrayList<Attribute>();
             SampleUser user = caClient.registerUser(username, attList);
             caClient.enrollUser(user, attList);
@@ -153,9 +151,17 @@ public class FabricService {
 
         private boolean loginUserVerify(String username, byte[] signed, String source) throws Exception {
             System.out.println(HexBin.encode(signed));
-            String certPath = "./card/" + username + "/" + username + ".crt";
             CertificateFactory cf = CertificateFactory.getInstance("X.509");
-            X509Certificate cert = (X509Certificate)cf.generateCertificate(new FileInputStream(certPath));
+            CAClient caClient = newCAClient();
+            File cardFile = new File("./card/" + username + "/" + username + ".card");
+            File certFile = new File("./card/" + username + "/" + username + ".crt");
+            // reenroll for get a new Cert, Also, you can read cert from certfile directly
+            // if user has been revoked, reenroll will failed, you should register user again
+            SampleUser cuser = UserUtils.unSerializeUser(cardFile);
+            caClient.reenrollUser(cuser);
+            FileInputStream fileInputStream = new FileInputStream(certFile);
+            X509Certificate cert = (X509Certificate)cf.generateCertificate(fileInputStream);
+            fileInputStream.close();
             PublicKey ecPublicKey = cert.getPublicKey();
             X509EncodedKeySpec x509EncodedKeySpec = new X509EncodedKeySpec(ecPublicKey.getEncoded());
             KeyFactory keyFactory = KeyFactory.getInstance("EC");
@@ -168,13 +174,18 @@ public class FabricService {
         }
 
         private void revokeUser(String username) throws Exception {
-            Path connectionFilePath = Paths.get("./", "connection.json");
-            ConnectionProfile connectionProfile = new ConnectionProfile(connectionFilePath.toFile());
-            CAClient caClient = new CAClient(connectionProfile.getNetworkConfig().getClientOrganization());
+            CAClient caClient = newCAClient();
             File cardFile = new File("./card/" + username + "/" + username + ".card");
             SampleUser ruser = UserUtils.unSerializeUser(cardFile);
             String revoke = caClient.revokeUser(ruser);
             System.out.println("revoke: " + revoke);
+        }
+
+        private CAClient newCAClient() throws Exception {
+            Path connectionFilePath = Paths.get("./", "connection.json");
+            ConnectionProfile connectionProfile = new ConnectionProfile(connectionFilePath.toFile());
+            CAClient caClient = new CAClient(connectionProfile.getNetworkConfig().getClientOrganization());
+            return caClient;
         }
     }
 }
