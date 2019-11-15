@@ -1,5 +1,6 @@
 import com.alibaba.fastjson.JSONObject;
 import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
+import org.bouncycastle.jcajce.provider.symmetric.VMPC;
 import org.hyperledger.fabric.sdk.Enrollment;
 import org.hyperledger.fabric.sdk.NetworkConfig;
 import org.hyperledger.fabric.sdk.helper.Utils;
@@ -13,7 +14,12 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.PublicKey;
+import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPublicKey;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 
 public class CAClient {
     private static final String adminUsername = "admin";
@@ -151,6 +157,19 @@ public class CAClient {
         keyWriter.close();
     }
 
+    public X509Certificate getCertificate(String username) throws Exception {
+        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
+        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
+        SampleUser fabricAdmin = enrollAdmin();
+        HFCACertificateRequest certReq = caClient.newHFCACertificateRequest();
+        certReq.setEnrollmentID(username);
+        HFCACertificateResponse certResp = caClient.getHFCACertificates(fabricAdmin, certReq);
+        ArrayList<HFCACredential> certs = (ArrayList<HFCACredential>)certResp.getCerts();
+        System.out.println("certs length: " + certs.size());
+        HFCAX509Certificate cert = (HFCAX509Certificate)certs.get(certs.size() - 1);
+        return cert.getX509();
+    }
+
     public static void main(String[] args) throws Exception {
         Path connectionFilePath = Paths.get("./", "connection.json");
         ConnectionProfile connectionProfile = new ConnectionProfile(connectionFilePath.toFile());
@@ -166,8 +185,7 @@ public class CAClient {
         caClient.enrollUser(user, attList);
 
         System.out.println("===== 从 Fabric CA 获取证书 =====");
-        SampleUser cuser = UserUtils.unSerializeUser(cardFile);
-        caClient.reenrollUser(cuser);
+        X509Certificate cert = caClient.getCertificate(username);
 
         System.out.println("===== 在 Fabric CA 注销用户，并删除用户私钥和证书 =====");
         SampleUser ruser = UserUtils.unSerializeUser(cardFile);

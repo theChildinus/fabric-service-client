@@ -69,10 +69,12 @@ public class FabricService {
             RegisterResp resp;
             try {
                 registerUser(req.getUsername());
+                logger.info("[Register] "+ req.getUsername() + " Register Success");
                 resp = RegisterResp.newBuilder().setCode(0).build();
 
             } catch (Exception e) {
                 e.printStackTrace();
+                logger.info("[Register] "+ req.getUsername() + " Register Failed");
                 resp = RegisterResp.newBuilder().setCode(-1).build();
             }
             responseObserver.onNext(resp);
@@ -98,9 +100,11 @@ public class FabricService {
             }
             DownloadResp resp;
             try {
+                logger.info("[Download] " + req.getUsername() + " Cert Download Success");
                 resp = DownloadResp.newBuilder().setCert(sb.toString()).build();
             } catch (Exception e) {
                 e.printStackTrace();
+                logger.info("[Download] " + req.getUsername() + " Cert Download Failed");
                 resp = DownloadResp.newBuilder().setCert("").build();
             }
             responseObserver.onNext(resp);
@@ -114,13 +118,16 @@ public class FabricService {
             try {
                 boolean res = loginUserVerify(req.getUsername(), Base64.decode(req.getUsersign()), String.valueOf(req.getUserrand()));
                 if (res) {
+                    logger.info("[Login]" + req.getUsername() + " Login Success");
                     resp = LoginResp.newBuilder().setCode(0).build();
                 } else {
+                    logger.info("[Login]" + req.getUsername() + " Login Failed");
                     resp = LoginResp.newBuilder().setCode(-1).build();
                 }
 
             } catch (Exception e) {
                 e.printStackTrace();
+                logger.info("[Login]" + req.getUsername() + " Login Failed");
                 resp = LoginResp.newBuilder().setCode(-1).build();
             }
             responseObserver.onNext(resp);
@@ -133,9 +140,11 @@ public class FabricService {
             RevokeResp resp;
             try {
                 revokeUser(req.getUsername());
+                logger.info("[Revoke]" + req.getUsername() + " Revoke Success");
                 resp = RevokeResp.newBuilder().setCode(0).build();
             } catch (Exception e) {
                 e.printStackTrace();
+                logger.info("[Revoke]" + req.getUsername() + " Revoke Failed");
                 resp = RevokeResp.newBuilder().setCode(-1).build();
             }
             responseObserver.onNext(resp);
@@ -150,21 +159,14 @@ public class FabricService {
         }
 
         private boolean loginUserVerify(String username, byte[] signed, String source) throws Exception {
-            CertificateFactory cf = CertificateFactory.getInstance("X.509");
             CAClient caClient = newCAClient();
             File cardFile = new File("./card/" + username + "/" + username + ".card");
-            File certFile = new File("./card/" + username + "/" + username + ".crt");
-            // reenroll for get a new Cert, Also, you can read cert from certfile directly
-            // if user has been revoked, reenroll will failed, you should register user again
             SampleUser cuser = UserUtils.unSerializeUser(cardFile);
             if (cuser.isRevoked()) {
-                logger.info("[Login] User " + username + "has been Revoked");
+                logger.info("[Login] User " + username + " has been Revoked");
                 return false;
             }
-            caClient.reenrollUser(cuser);
-            FileInputStream fileInputStream = new FileInputStream(certFile);
-            X509Certificate cert = (X509Certificate)cf.generateCertificate(fileInputStream);
-            fileInputStream.close();
+            X509Certificate cert = caClient.getCertificate(username);
             PublicKey ecPublicKey = cert.getPublicKey();
             X509EncodedKeySpec x509EncodedKeySpec = new X509EncodedKeySpec(ecPublicKey.getEncoded());
             KeyFactory keyFactory = KeyFactory.getInstance("EC");
