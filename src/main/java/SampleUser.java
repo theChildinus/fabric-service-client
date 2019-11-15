@@ -18,6 +18,7 @@ public class SampleUser implements User, Serializable {
     private String enrollmentSecret;
     private String signedCert;
     private String privateKey;
+    private boolean revoked;
     Enrollment enrollment;
 
     @Override
@@ -136,5 +137,13 @@ public class SampleUser implements User, Serializable {
 
     public String getSignedCert() {
         return signedCert;
+    }
+
+    public boolean isRevoked() {
+        return revoked;
+    }
+
+    public void setRevoked(boolean value) {
+        this.revoked = value;
     }
 }

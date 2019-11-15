@@ -97,6 +97,7 @@ public class CAClient {
         String signedCert = enrollment.getCert();
         user.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
         user.setSignedCert(signedCert);
+        user.setRevoked(false);
         FileWriter cardWriter = new FileWriter(cardfile);
         FileWriter certWriter = new FileWriter(certfile);
         FileWriter keyWriter = new FileWriter(keyfile);
@@ -114,8 +115,14 @@ public class CAClient {
         HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
         caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
         String revoke = caClient.revoke(user, user.getEnrollment(), "Revoke User " + user.getName(), true);
+        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
         File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
         File keyfile = new File(storePath + "/" + username + "/" + username + ".pem");
+        user.setRevoked(true);
+        FileWriter cardWriter = new FileWriter(cardfile);
+        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
+        cardWriter.write(encode);
+        cardWriter.close();
         Utils.deleteFileOrDirectory(certfile);
         Utils.deleteFileOrDirectory(keyfile);
         return revoke;

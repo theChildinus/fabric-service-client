@@ -65,7 +65,7 @@ public class FabricService {
     static class FabricServiceImpl extends FabricServiceGrpc.FabricServiceImplBase {
         @Override
         public void register(RegisterReq req, StreamObserver<RegisterResp> responseObserver) {
-            logger.info("Received UserName:" + req.getUsername());
+            logger.info("[Register] Received UserName:" + req.getUsername());
             RegisterResp resp;
             try {
                 registerUser(req.getUsername());
@@ -81,7 +81,7 @@ public class FabricService {
 
         @Override
         public void download(DownloadReq req, StreamObserver<DownloadResp> responseObserver) {
-            logger.info("Received UserName:" + req.getUsername());
+            logger.info("[Download] Received UserName:" + req.getUsername());
             String userName = req.getUsername();
             StringBuilder sb = new StringBuilder();
             File file = new File("./card/" + userName + "/" + userName + ".crt");
@@ -109,7 +109,7 @@ public class FabricService {
 
         @Override
         public void login(LoginReq req, StreamObserver<LoginResp> responseObserver) {
-            logger.info("Received UserName:" + req.getUsername());
+            logger.info("[Login] Received UserName:" + req.getUsername());
             LoginResp resp;
             try {
                 boolean res = loginUserVerify(req.getUsername(), Base64.decode(req.getUsersign()), String.valueOf(req.getUserrand()));
@@ -129,7 +129,7 @@ public class FabricService {
 
         @Override
         public void revoke(RevokeReq req, StreamObserver<RevokeResp> responseObserver) {
-            logger.info("Received UserName:" + req.getUsername());
+            logger.info("[Revoke] Received UserName:" + req.getUsername());
             RevokeResp resp;
             try {
                 revokeUser(req.getUsername());
@@ -150,7 +150,6 @@ public class FabricService {
         }
 
         private boolean loginUserVerify(String username, byte[] signed, String source) throws Exception {
-            System.out.println(HexBin.encode(signed));
             CertificateFactory cf = CertificateFactory.getInstance("X.509");
             CAClient caClient = newCAClient();
             File cardFile = new File("./card/" + username + "/" + username + ".card");
@@ -158,6 +157,10 @@ public class FabricService {
             // reenroll for get a new Cert, Also, you can read cert from certfile directly
             // if user has been revoked, reenroll will failed, you should register user again
             SampleUser cuser = UserUtils.unSerializeUser(cardFile);
+            if (cuser.isRevoked()) {
+                logger.info("[Login] User " + username + "has been Revoked");
+                return false;
+            }
             caClient.reenrollUser(cuser);
             FileInputStream fileInputStream = new FileInputStream(certFile);
             X509Certificate cert = (X509Certificate)cf.generateCertificate(fileInputStream);
