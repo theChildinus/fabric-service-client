@@ -7,10 +7,7 @@ import org.apache.log4j.BasicConfigurator;
 import org.hyperledger.fabric_ca.sdk.Attribute;
 import proto.*;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.KeyFactory;
@@ -146,6 +143,31 @@ public class FabricService {
                 e.printStackTrace();
                 logger.info("[Revoke]" + req.getUsername() + " Revoke Failed");
                 resp = RevokeResp.newBuilder().setCode(-1).build();
+            }
+            responseObserver.onNext(resp);
+            responseObserver.onCompleted();
+        }
+
+        @Override
+        public void verifyCert(VerifyCertReq req, StreamObserver<VerifyCertResp> responseObserver) {
+            logger.info("[verifyCert] Received UserName:" + req.getUsername());
+            VerifyCertResp resp;
+            try {
+                CAClient caClient = newCAClient();
+                byte[] cert = Base64.decode(req.getCertcontent());
+                ByteArrayInputStream in = new ByteArrayInputStream(cert);
+                boolean res = caClient.verifyCert(req.getUsername(), in);
+                if (res) {
+                    logger.info("[verifyCert]" + req.getUsername() + " Success");
+                    resp = VerifyCertResp.newBuilder().setCode(0).build();
+                } else {
+                    logger.info("[verifyCert]" + req.getUsername() + " Failed");
+                    resp = VerifyCertResp.newBuilder().setCode(-1).build();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                logger.info("[verifyCert]" + req.getUsername() + " Failed");
+                resp = VerifyCertResp.newBuilder().setCode(-1).build();
             }
             responseObserver.onNext(resp);
             responseObserver.onCompleted();

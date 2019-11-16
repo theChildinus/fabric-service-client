@@ -9,12 +9,13 @@ import org.hyperledger.fabric_ca.sdk.*;
 import org.hyperledger.fabric_ca.sdk.exception.InvalidArgumentException;
 import org.w3c.dom.Attr;
 
-import java.io.File;
-import java.io.FileWriter;
+import java.io.*;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.PublicKey;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
 import java.util.ArrayList;
@@ -170,13 +171,27 @@ public class CAClient {
         return cert.getX509();
     }
 
+    public boolean verifyCert(String username, InputStream usercert) throws Exception {
+        X509Certificate certFromCA = getCertificate(username);
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        X509Certificate certFromU = (X509Certificate)cf.generateCertificate(usercert);
+        certFromU.checkValidity();
+        if (certFromCA.getSerialNumber().equals(certFromU.getSerialNumber())
+            && Arrays.equals(certFromCA.getSignature(), certFromU.getSignature())) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Path connectionFilePath = Paths.get("./", "connection.json");
         ConnectionProfile connectionProfile = new ConnectionProfile(connectionFilePath.toFile());
         CAClient caClient = new CAClient(connectionProfile.getNetworkConfig().getClientOrganization());
         ArrayList<Attribute> attList = new ArrayList<Attribute>();
-        String username = "test9";
+        String username = "zhao";
         File cardFile = new File("./card/" + username + "/" + username + ".card");
+        File certFile = new File("./card/" + username + "/" + username + ".crt");
 
         System.out.println("===== 在 Fabric CA 注册用户 =====");
         SampleUser user = caClient.registerUser(username, attList);
@@ -191,5 +206,10 @@ public class CAClient {
         SampleUser ruser = UserUtils.unSerializeUser(cardFile);
         String revoke = caClient.revokeUser(ruser);
         System.out.println("revoke: " + revoke);
+
+        System.out.println("===== 证书验证 =====");
+        FileInputStream in = new FileInputStream(certFile);
+        System.out.println(caClient.verifyCert(username, in));
+        in.close();
     }
 }
