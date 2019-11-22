@@ -8,6 +8,7 @@ import org.hyperledger.fabric.sdk.security.CryptoSuite;
 import org.hyperledger.fabric_ca.sdk.*;
 import org.hyperledger.fabric_ca.sdk.exception.InvalidArgumentException;
 import org.w3c.dom.Attr;
+import proto.*;
 
 import java.io.*;
 import java.net.MalformedURLException;
@@ -117,7 +118,7 @@ public class CAClient {
         keyWriter.close();
     }
 
-    public String revokeUser (SampleUser user) throws Exception {
+    public String revokeUser(SampleUser user) throws Exception {
         String username = user.getName();
         HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
         caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
@@ -130,8 +131,10 @@ public class CAClient {
         String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
         cardWriter.write(encode);
         cardWriter.close();
-        Utils.deleteFileOrDirectory(certfile);
-        Utils.deleteFileOrDirectory(keyfile);
+        if (certfile.exists() && keyfile.exists()) {
+            Utils.deleteFileOrDirectory(certfile);
+            Utils.deleteFileOrDirectory(keyfile);
+        }
         return revoke;
     }
 
@@ -182,6 +185,83 @@ public class CAClient {
         } else {
             return false;
         }
+    }
+
+    public int registerIdentity(RegisterReq req) throws Exception {
+        SampleUser fabricAdmin = enrollAdmin();
+        File cardfile = new File(storePath + "/" + req.getName() + ".card");
+        if (!cardfile.exists()) {
+            HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
+            caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
+            RegistrationRequest rr = new RegistrationRequest(req.getName());
+            rr.setType(req.getType());
+            rr.setAffiliation(req.getAffiliation());
+            rr.setSecret(req.getSecret());
+            if (!req.getAttrs().isEmpty()) {
+                String[] attrs = req.getAttrs().split(",");
+                for (String attr : attrs) {
+                    String[] kv = attr.split("=");
+                    rr.addAttribute(new Attribute(kv[0], kv[1]));
+                }
+            }
+            String enrollmentSecret = caClient.register(rr, fabricAdmin);
+            SampleUser newUser = new SampleUser();
+            newUser.setName(req.getName());
+            newUser.setEnrollmentSecret(enrollmentSecret);
+            FileWriter cardWriter = new FileWriter(cardfile);
+            String encode = Base64.encode(JSONObject.toJSONString(newUser).getBytes());
+            cardWriter.write(encode);
+            cardWriter.close();
+            return 0;
+        }
+        return -1;
+    }
+
+    public int enrollIdentity(EnrollReq req) throws Exception {
+        String username = req.getName();
+        File cardfile = new File(storePath + "/" + username + ".card");
+        SampleUser user = UserUtils.unSerializeUser(cardfile);
+        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
+        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
+        if (!cardfile.exists()) {
+            if (!cardfile.getParentFile().mkdirs()) {
+                System.out.println("Create Dir Failed");
+            }
+        }
+        Enrollment enrollment = null;
+        if (!req.getAttrs().isEmpty()) {
+            EnrollmentRequest er = new EnrollmentRequest();
+//            for (Attribute attribute : attList) {
+//                er.addAttrReq(attribute.getName()).setOptional(true);
+//            }
+            enrollment = caClient.enroll(username, user.getEnrollmentSecret(), er);
+        } else {
+            enrollment = caClient.enroll(username, user.getEnrollmentSecret());
+        }
+        String signedCert = enrollment.getCert();
+        user.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
+        user.setSignedCert(signedCert);
+        user.setRevoked(false);
+        user.setRevoked(false);
+        FileWriter cardWriter = new FileWriter(cardfile);
+        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
+        cardWriter.write(encode);
+        cardWriter.close();
+        return 0;
+    }
+
+    public int revokeIdentity(RevokeReq req) throws Exception {
+        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
+        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
+        File cardfile = new File(storePath + "/" + req.getName() + ".card");
+        SampleUser user = UserUtils.unSerializeUser(cardfile);
+        caClient.revoke(user, user.getEnrollment(), "Revoke Identity " + user.getName(), true);
+        user.setRevoked(true);
+        FileWriter cardWriter = new FileWriter(cardfile);
+        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
+        cardWriter.write(encode);
+        cardWriter.close();
+        return 0;
     }
 
     public static void main(String[] args) throws Exception {
