@@ -84,7 +84,7 @@ public class CAClient {
         String username = user.getName();
         File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
         File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
-        File keyfile = new File(storePath + "/"+ username + "/" + username + ".pem");
+        File keyfile = new File(storePath + "/" + username + "/" + username + ".pem");
         HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
         caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
         if (!cardfile.exists()) {
@@ -189,8 +189,12 @@ public class CAClient {
 
     public int registerIdentity(RegisterReq req) throws Exception {
         SampleUser fabricAdmin = enrollAdmin();
-        File cardfile = new File(storePath + "/" + req.getName() + ".card");
+        String username = req.getName();
+        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
         if (!cardfile.exists()) {
+            if (!cardfile.getParentFile().mkdirs()) {
+                System.out.println("Create Dir Failed");
+            }
             HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
             caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
             RegistrationRequest rr = new RegistrationRequest(req.getName());
@@ -219,7 +223,9 @@ public class CAClient {
 
     public int enrollIdentity(EnrollReq req) throws Exception {
         String username = req.getName();
-        File cardfile = new File(storePath + "/" + username + ".card");
+        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
+        File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
+        File keyfile = new File(storePath + "/" + username + "/" + username + ".pem");
         SampleUser user = UserUtils.unSerializeUser(cardfile);
         HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
         caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
@@ -244,24 +250,37 @@ public class CAClient {
         user.setRevoked(false);
         user.setRevoked(false);
         FileWriter cardWriter = new FileWriter(cardfile);
+        FileWriter certWriter = new FileWriter(certfile);
+        FileWriter keyWriter = new FileWriter(keyfile);
         String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
         cardWriter.write(encode);
+        certWriter.write(user.getSignedCert());
+        keyWriter.write(user.getPrivateKey());
         cardWriter.close();
+        certWriter.close();
+        keyWriter.close();
         return 0;
     }
 
-    public int revokeIdentity(RevokeReq req) throws Exception {
+    public String revokeIdentity(RevokeReq req) throws Exception {
+        String username = req.getName();
         HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
         caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
-        File cardfile = new File(storePath + "/" + req.getName() + ".card");
+        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
+        File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
+        File keyfile = new File(storePath + "/" + username + "/" + username + ".pem");
         SampleUser user = UserUtils.unSerializeUser(cardfile);
-        caClient.revoke(user, user.getEnrollment(), "Revoke Identity " + user.getName(), true);
+        String revoke = caClient.revoke(user, user.getEnrollment(), "Revoke Identity " + user.getName(), true);
         user.setRevoked(true);
         FileWriter cardWriter = new FileWriter(cardfile);
         String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
         cardWriter.write(encode);
         cardWriter.close();
-        return 0;
+        if (certfile.exists() && keyfile.exists()) {
+            Utils.deleteFileOrDirectory(certfile);
+            Utils.deleteFileOrDirectory(keyfile);
+        }
+        return revoke;
     }
 
     public static void main(String[] args) throws Exception {

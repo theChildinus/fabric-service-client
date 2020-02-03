@@ -135,23 +135,23 @@ public class FabricService {
         }
 
         @Override
-        public void login(LoginReq req, StreamObserver<LoginResp> responseObserver) {
-            logger.info("[Login] Received UserName: " + req.getName() + " Type: " + req.getType());
-            LoginResp resp;
+        public void verifyIdentity(VerifyIdentityReq req, StreamObserver<VerifyIdentityResp> responseObserver) {
+            logger.info("[verifyIdentity] Received UserName: " + req.getName() + " Type: " + req.getType());
+            VerifyIdentityResp resp;
             try {
-                boolean res = loginUserVerify(req.getName(), Base64.decode(req.getSign()), String.valueOf(req.getRand()));
+                boolean res = UserVerify(req.getName(), Base64.decode(req.getSign()), String.valueOf(req.getRand()));
                 if (res) {
-                    logger.info("[Login] " + req.getName() + " Login Success");
-                    resp = LoginResp.newBuilder().setCode(0).build();
+                    logger.info("[verifyIdentity] " + req.getName() + " verify Success");
+                    resp = VerifyIdentityResp.newBuilder().setCode(0).build();
                 } else {
-                    logger.info("[Login] " + req.getName() + " Login Failed");
-                    resp = LoginResp.newBuilder().setCode(-1).build();
+                    logger.info("[verifyIdentity] " + req.getName() + " verify Failed");
+                    resp = VerifyIdentityResp.newBuilder().setCode(-1).build();
                 }
 
             } catch (Exception e) {
                 e.printStackTrace();
-                logger.info("[Login] " + req.getName() + " Login Failed");
-                resp = LoginResp.newBuilder().setCode(-1).build();
+                logger.info("[verifyIdentity] " + req.getName() + " verify Failed");
+                resp = VerifyIdentityResp.newBuilder().setCode(-1).build();
             }
             responseObserver.onNext(resp);
             responseObserver.onCompleted();
@@ -169,7 +169,8 @@ public class FabricService {
                     String revoke = caClient.revokeUser(ruser);
                     System.out.println("revoke: " + revoke);
                 } else {
-                    caClient.revokeIdentity(req);
+                    String revoke = caClient.revokeIdentity(req);
+                    System.out.println("revoke: " + revoke);
                 }
                 logger.info("[Revoke] " + req.getName() + " Revoke Success");
                 resp = RevokeResp.newBuilder().setCode(0).build();
@@ -207,12 +208,12 @@ public class FabricService {
             responseObserver.onCompleted();
         }
 
-        private boolean loginUserVerify(String username, byte[] signed, String source) throws Exception {
+        private boolean UserVerify(String username, byte[] signed, String source) throws Exception {
             CAClient caClient = newCAClient();
             File cardFile = new File("./card/" + username + "/" + username + ".card");
             SampleUser cuser = UserUtils.unSerializeUser(cardFile);
             if (cuser.isRevoked()) {
-                logger.info("[Login] User " + username + " has been Revoked");
+                logger.info("[UserVerify] User " + username + " has been Revoked");
                 return false;
             }
             X509Certificate cert = caClient.getCertificate(username);
