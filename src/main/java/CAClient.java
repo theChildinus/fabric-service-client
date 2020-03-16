@@ -11,9 +11,11 @@ import org.w3c.dom.Attr;
 import proto.*;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
@@ -57,116 +59,13 @@ public class CAClient {
         return fabricAdmin;
     }
 
-    public SampleUser registerUser(String username, ArrayList<Attribute> attList) throws Exception {
-        SampleUser fabricAdmin = enrollAdmin();
-        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
-        if (!cardfile.exists()) {
-            HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
-            caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
-            RegistrationRequest rr = new RegistrationRequest(username);
-            rr.setType("user");
-            if (!attList.isEmpty()) {
-                for (Attribute attribute : attList) {
-                    rr.addAttribute(attribute);
-                }
-            }
-            String enrollmentSecret = caClient.register(rr, fabricAdmin);
-            SampleUser newUser = new SampleUser();
-            newUser.setName(username);
-            newUser.setEnrollmentSecret(enrollmentSecret);
-            return newUser;
-        }
-        SampleUser fabricUser = UserUtils.unSerializeUser(cardfile);
-        return fabricUser;
-    }
-
-    public void enrollUser(SampleUser user, ArrayList<Attribute> attList) throws Exception {
-        String username = user.getName();
-        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
-        File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
-        File keyfile = new File(storePath + "/" + username + "/" + username + ".pem");
-        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
-        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
-        if (!cardfile.exists()) {
-            if (!cardfile.getParentFile().mkdirs()) {
-                System.out.println("Create Dir Failed");
-            }
-        }
-        Enrollment enrollment = null;
-        if (!attList.isEmpty()) {
-            EnrollmentRequest req = new EnrollmentRequest();
-            for (Attribute attribute : attList) {
-                req.addAttrReq(attribute.getName()).setOptional(true);
-            }
-            enrollment = caClient.enroll(username, user.getEnrollmentSecret(), req);
-        } else {
-            enrollment = caClient.enroll(username, user.getEnrollmentSecret());
-        }
-        String signedCert = enrollment.getCert();
-        user.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
-        user.setSignedCert(signedCert);
-        user.setRevoked(false);
-        FileWriter cardWriter = new FileWriter(cardfile);
-        FileWriter certWriter = new FileWriter(certfile);
-        FileWriter keyWriter = new FileWriter(keyfile);
-        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
-        cardWriter.write(encode);
-        certWriter.write(user.getSignedCert());
-        keyWriter.write(user.getPrivateKey());
-        cardWriter.close();
-        certWriter.close();
-        keyWriter.close();
-    }
-
-    public String revokeUser(SampleUser user) throws Exception {
-        String username = user.getName();
-        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
-        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
-        String revoke = caClient.revoke(user, user.getEnrollment(), "Revoke User " + user.getName(), true);
-        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
-        File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
-        File keyfile = new File(storePath + "/" + username + "/" + username + ".pem");
-        user.setRevoked(true);
-        FileWriter cardWriter = new FileWriter(cardfile);
-        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
-        cardWriter.write(encode);
-        cardWriter.close();
-        if (certfile.exists() && keyfile.exists()) {
-            Utils.deleteFileOrDirectory(certfile);
-            Utils.deleteFileOrDirectory(keyfile);
-        }
-        return revoke;
-    }
-
-    public void reenrollUser(SampleUser user) throws Exception {
-        String username = user.getName();
-        File cardfile = new File(storePath + "/" + username + "/" + username + ".card");
-        File certfile = new File(storePath + "/" + username + "/" + username + ".crt");
-        File keyfile = new File(storePath + "/"+ username + "/" + username + ".pem");
-        HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
-        caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
-        Enrollment enrollment = caClient.reenroll(user);
-        String signedCert = enrollment.getCert();
-        user.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
-        user.setSignedCert(signedCert);
-        FileWriter cardWriter = new FileWriter(cardfile);
-        FileWriter certWriter = new FileWriter(certfile);
-        FileWriter keyWriter = new FileWriter(keyfile);
-        String encode = Base64.encode(JSONObject.toJSONString(user).getBytes());
-        cardWriter.write(encode);
-        certWriter.write(user.getSignedCert());
-        keyWriter.write(user.getPrivateKey());
-        cardWriter.close();
-        certWriter.close();
-        keyWriter.close();
-    }
-
     public X509Certificate getCertificate(String username) throws Exception {
         HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
         caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
         SampleUser fabricAdmin = enrollAdmin();
         HFCACertificateRequest certReq = caClient.newHFCACertificateRequest();
-        certReq.setEnrollmentID(username);
+        String md5Str = getMd5Str(username);
+        certReq.setEnrollmentID(md5Str);
         HFCACertificateResponse certResp = caClient.getHFCACertificates(fabricAdmin, certReq);
         ArrayList<HFCACredential> certs = (ArrayList<HFCACredential>)certResp.getCerts();
         System.out.println("certs length: " + certs.size());
@@ -197,7 +96,8 @@ public class CAClient {
             }
             HFCAClient caClient = HFCAClient.createNewInstance(caInfo);
             caClient.setCryptoSuite(CryptoSuite.Factory.getCryptoSuite());
-            RegistrationRequest rr = new RegistrationRequest(req.getName());
+            String md5Str = getMd5Str(username);
+            RegistrationRequest rr = new RegistrationRequest(md5Str);
             rr.setType(req.getType());
             rr.setAffiliation(req.getAffiliation());
             rr.setSecret(req.getSecret());
@@ -210,7 +110,7 @@ public class CAClient {
             }
             String enrollmentSecret = caClient.register(rr, fabricAdmin);
             SampleUser newUser = new SampleUser();
-            newUser.setName(req.getName());
+            newUser.setName(md5Str);
             newUser.setEnrollmentSecret(enrollmentSecret);
             FileWriter cardWriter = new FileWriter(cardfile);
             String encode = Base64.encode(JSONObject.toJSONString(newUser).getBytes());
@@ -240,14 +140,13 @@ public class CAClient {
 //            for (Attribute attribute : attList) {
 //                er.addAttrReq(attribute.getName()).setOptional(true);
 //            }
-            enrollment = caClient.enroll(username, user.getEnrollmentSecret(), er);
+            enrollment = caClient.enroll(user.getName(), user.getEnrollmentSecret(), er);
         } else {
-            enrollment = caClient.enroll(username, user.getEnrollmentSecret());
+            enrollment = caClient.enroll(user.getName(), user.getEnrollmentSecret());
         }
         String signedCert = enrollment.getCert();
         user.setPrivateKey(UserUtils.getPEMString(enrollment.getKey()));
         user.setSignedCert(signedCert);
-        user.setRevoked(false);
         user.setRevoked(false);
         FileWriter cardWriter = new FileWriter(cardfile);
         FileWriter certWriter = new FileWriter(certfile);
@@ -283,32 +182,38 @@ public class CAClient {
         return revoke;
     }
 
+    private String getMd5Str(String str) throws Exception {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update(str.getBytes());
+        String md5sum = new BigInteger(1, md.digest()).toString(16);
+        System.out.println("username: " + str + ", md5sum: " + md5sum);
+        return md5sum;
+    }
+
     public static void main(String[] args) throws Exception {
         Path connectionFilePath = Paths.get("./", "connection.json");
         ConnectionProfile connectionProfile = new ConnectionProfile(connectionFilePath.toFile());
         CAClient caClient = new CAClient(connectionProfile.getNetworkConfig().getClientOrganization());
-        ArrayList<Attribute> attList = new ArrayList<Attribute>();
-        String username = "zhao";
-        File cardFile = new File("./card/" + username + "/" + username + ".card");
-        File certFile = new File("./card/" + username + "/" + username + ".crt");
+        String username = "赵孔阳";
+        File cardFile = new File(storePath + "/" + username + "/" + username + ".card");
+        File certFile = new File(storePath + "/" + username + "/" + username + ".crt");
 
         System.out.println("===== 在 Fabric CA 注册用户 =====");
-        SampleUser user = caClient.registerUser(username, attList);
+        RegisterReq rq = RegisterReq.newBuilder().setName(username).build();
+        caClient.registerIdentity(rq);
 
         System.out.println("===== 在 Fabric CA 登录用户，并创建用户私钥和证书 =====");
-        caClient.enrollUser(user, attList);
-
-        System.out.println("===== 从 Fabric CA 获取证书 =====");
-        X509Certificate cert = caClient.getCertificate(username);
-
-        System.out.println("===== 在 Fabric CA 注销用户，并删除用户私钥和证书 =====");
-        SampleUser ruser = UserUtils.unSerializeUser(cardFile);
-        String revoke = caClient.revokeUser(ruser);
-        System.out.println("revoke: " + revoke);
+        EnrollReq eq = EnrollReq.newBuilder().setName(username).build();
+        caClient.enrollIdentity(eq);
 
         System.out.println("===== 证书验证 =====");
         FileInputStream in = new FileInputStream(certFile);
         System.out.println(caClient.verifyCert(username, in));
         in.close();
+
+        System.out.println("===== 在 Fabric CA 注销用户，并删除用户私钥和证书 =====");
+        RevokeReq rrq = RevokeReq.newBuilder().setName(username).build();
+        String revoke = caClient.revokeIdentity(rrq);
+        System.out.println("revoke: " + revoke);
     }
 }

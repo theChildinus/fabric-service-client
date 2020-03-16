@@ -66,10 +66,10 @@ public class FabricService {
             RegisterResp resp;
             try {
                 CAClient caClient = newCAClient();
-                if (req.getType().equals("user")) {
-                    ArrayList<Attribute> attList = new ArrayList<Attribute>();
-                    SampleUser user = caClient.registerUser(req.getName(), attList);
-                    caClient.enrollUser(user, attList);
+                if (req.getType().equals("iotuser")) {
+                    caClient.registerIdentity(req);
+                    EnrollReq eq = EnrollReq.newBuilder().setName(req.getName()).build();
+                    caClient.enrollIdentity(eq);
                 } else {
                     caClient.registerIdentity(req);
                 }
@@ -163,15 +163,7 @@ public class FabricService {
             RevokeResp resp;
             try {
                 CAClient caClient = newCAClient();
-                if (req.getType().equals("user")) {
-                    File cardFile = new File("./card/" + req.getName() + "/" + req.getName() + ".card");
-                    SampleUser ruser = UserUtils.unSerializeUser(cardFile);
-                    String revoke = caClient.revokeUser(ruser);
-                    System.out.println("revoke: " + revoke);
-                } else {
-                    String revoke = caClient.revokeIdentity(req);
-                    System.out.println("revoke: " + revoke);
-                }
+                String revoke = caClient.revokeIdentity(req);
                 logger.info("[Revoke] " + req.getName() + " Revoke Success");
                 resp = RevokeResp.newBuilder().setCode(0).build();
             } catch (Exception e) {
